@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+env/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model and generated outputs
+models/*.joblib
+models/*.pkl
+Data/processed/*
+Reports/figures/*.png
+Reports/figures/*.jpg
+Reports/figures/*.jpeg
+
+# Keep placeholder files
+!Data/processed/.gitkeep
+!Reports/figures/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
