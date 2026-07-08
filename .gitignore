@@ -15,9 +15,18 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Runtime artifacts
+logs/
+.matplotlib_cache/
+
 # Model and generated outputs
 models/*.joblib
 models/*.pkl
+!models/risknot_artifacts.joblib
 Data/processed/*
 Reports/figures/*.png
 Reports/figures/*.jpg

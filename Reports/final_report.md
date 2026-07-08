@@ -61,6 +61,17 @@ Important engineered features include:
 
 Safe division was used for ratio features to avoid division by zero and invalid infinite values.
 
+## Credit Policy Overlay
+
+Because tree-based models do not guarantee monotonic behavior, a conservative prediction-time policy overlay was added for severe repayment delinquency. This prevents operationally unrealistic cases where a customer with a very high current repayment delay receives a lower displayed risk score than a less delinquent customer.
+
+The final displayed default probability is the maximum of:
+
+- the model-predicted default probability
+- a repayment-severity floor based on recent and maximum delinquency
+
+The API also returns `model_probability` and `policy_adjusted` so this adjustment remains transparent.
+
 ## Model Comparison
 
 The following models were trained and compared:

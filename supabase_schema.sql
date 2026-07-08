@@ -16,3 +16,6 @@ create index if not exists risk_assessments_created_at_idx
 
 create index if not exists risk_assessments_risk_segment_idx
   on risk_assessments (risk_segment);
+
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table public.risk_assessments to service_role;

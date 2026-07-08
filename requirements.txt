@@ -1,14 +1,14 @@
 pandas
 numpy
-scikit-learn
+scikit-learn==1.6.1
 matplotlib
 seaborn
 joblib
 shap
 lightgbm
 xgboost
-streamlit
 fastapi
 uvicorn
 pydantic
 requests
+python-dotenv

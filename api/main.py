@@ -9,9 +9,13 @@ import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 
 from src.config import DEFAULT_ARTIFACT_PATH
+from src.explain import explain_single_prediction
 from src.predict import load_artifacts, predict_dataframe
+
+load_dotenv()
 
 app = FastAPI(title="RiskNot API", version="0.1.0")
 
@@ -100,7 +104,7 @@ def save_assessment(input_payload: dict, model_response: dict) -> dict | None:
         f"{SUPABASE_URL}/rest/v1/risk_assessments",
         headers=supabase_headers(),
         json=payload,
-        timeout=15,
+        timeout=4,
     )
     response.raise_for_status()
     rows = response.json()
@@ -120,7 +124,7 @@ def fetch_assessments(limit: int = 25) -> list[dict]:
             "order": "created_at.desc",
             "limit": limit,
         },
-        timeout=15,
+        timeout=4,
     )
     response.raise_for_status()
     return response.json()
@@ -145,14 +149,24 @@ def predict(customer: CustomerInput):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     model_response = {
+        "model_probability": float(prediction.get("model_probability", prediction["default_probability"])),
         "default_probability": float(prediction["default_probability"]),
+        "policy_adjusted": bool(prediction.get("policy_adjusted", False)),
         "risk_score": int(prediction["risk_score"]),
         "risk_segment": prediction["risk_segment"],
         "predicted_default": int(prediction["predicted_default"]),
         "selected_threshold": float(artifacts.get("selected_threshold", 0.30)),
         "final_model_name": artifacts.get("final_model_name", "model"),
     }
-    saved_row = save_assessment(customer.model_dump(), model_response)
+    try:
+        model_response["explanation"] = explain_single_prediction(raw, artifacts)
+    except Exception:
+        model_response["explanation"] = {"risk_increasing": [], "risk_decreasing": []}
+
+    try:
+        saved_row = save_assessment(customer.model_dump(), model_response)
+    except Exception:
+        saved_row = None
     model_response["saved"] = saved_row is not None
     model_response["assessment_id"] = saved_row.get("id") if saved_row else None
     return model_response

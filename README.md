@@ -1,25 +1,25 @@
-# RiskNot: Explainable Credit Default Risk Modeling
+# RiskNot
 
-RiskNot is an end-to-end machine learning portfolio project for predicting next-month credit-card default risk using the Taiwan Default of Credit Card Clients dataset.
+RiskNot is an end-to-end explainable credit-risk project that predicts next-month credit card default risk from the Taiwan Default of Credit Card Clients dataset.
 
-The project trains tabular classification models, tunes a final LightGBM model with cross-validation, optimizes the classification threshold for credit-risk trade-offs, explains model behavior with SHAP, and converts model probability into a readable 0-100 risk score.
+The project includes a modular machine learning pipeline, a FastAPI scoring service, a React/Vite user interface, SHAP local explanations, Supabase persistence, and a transparent credit-policy overlay for severe delinquency cases.
 
-## Business Problem
+## What It Predicts
 
-Credit-risk teams need to identify clients who may default before the next billing cycle. In this project, the model predicts:
+For a single customer, RiskNot returns:
 
 - Default probability
 - Risk score from 0 to 100
 - Risk segment: Low Risk, Medium Risk, or High Risk
-- Main model drivers using SHAP explainability
+- Local SHAP factors that raise or lower the predicted risk
 
 ## Dataset
 
 Dataset: Taiwan Default of Credit Card Clients.
 
-The dataset contains 30,000 client records from Taiwan, using demographic, credit, bill statement, repayment status, and payment amount variables from April 2005 to September 2005.
+The dataset contains 30,000 credit card client records from Taiwan, covering demographic information, credit limit, repayment status, bill statements, and payment amounts from April 2005 to September 2005.
 
-Target column:
+Target:
 
 ```text
 default.payment.next.month -> default
@@ -30,26 +30,76 @@ Target meaning:
 - `0`: no default next month
 - `1`: default next month
 
-## Project Pipeline
+## Current Architecture
 
-1. Load CSV or zipped CSV.
-2. Remove `ID`.
-3. Rename target to `default`.
-4. Clean categorical values.
-5. Engineer repayment, utilization, bill, and payment behavior features.
-6. Split data into train, validation, and test sets.
-7. Fit preprocessing only on training data.
-8. Train Logistic Regression, Random Forest, LightGBM, and XGBoost when available.
-9. Tune LightGBM with `RandomizedSearchCV` using stratified cross-validation and PR-AUC scoring.
-10. Select the final model based on validation PR-AUC.
-11. Optimize threshold based on credit-risk trade-offs.
-12. Evaluate on the test set.
-13. Explain predictions with SHAP.
-14. Save model artifacts with joblib.
+```text
+RiskNot/
+├── api/
+│   └── main.py                  # FastAPI prediction and persistence API
+├── Data/
+│   ├── raw/                     # optional raw data location
+│   ├── processed/               # generated processed data
+│   └── UCI_Credit_Card.csv      # local dataset copy
+├── frontend/
+│   ├── src/
+│   │   ├── main.jsx             # React UI
+│   │   └── styles.css
+│   ├── package.json
+│   └── package-lock.json
+├── models/
+│   └── risknot_artifacts.joblib # trained model artifact
+├── notebooks/
+│   └── RiskNot_Colab.ipynb      # training/study notebook
+├── Reports/
+│   ├── figures/
+│   └── final_report.md
+├── src/
+│   ├── config.py
+│   ├── data_cleaning.py
+│   ├── feature_engineering.py
+│   ├── preprocessing.py
+│   ├── train.py
+│   ├── evaluate.py
+│   ├── explain.py
+│   └── predict.py
+├── .env.example
+├── requirements.txt
+├── setup_risknot.bat
+├── start_risknot.bat
+├── supabase_schema.sql
+└── README.md
+```
+
+## Machine Learning Pipeline
+
+The training pipeline follows this flow:
+
+```text
+Raw CSV
+-> cleaning
+-> feature engineering
+-> stratified train/validation/test split
+-> preprocessing fitted on train only
+-> model comparison
+-> threshold selection
+-> test evaluation
+-> artifact export
+```
+
+Models compared:
+
+- Logistic Regression
+- Random Forest
+- LightGBM
+- XGBoost when available
+
+The current production artifact uses LightGBM.
 
 ## Feature Engineering
 
-Important engineered features include:
+RiskNot creates behavior-based features from the six-month repayment, billing, and payment history.
+
+Examples:
 
 - `max_delay`
 - `avg_delay`
@@ -65,59 +115,24 @@ Important engineered features include:
 - `high_utilization_flag`
 - `recent_nonpayment_flag`
 
-Safe division is used for ratio features to avoid invalid infinite or NaN values.
+Safe division is used for ratio features to avoid division by zero, NaN, and infinite values.
 
-## Model Results
+## Model Performance
 
-Validation comparison:
+Validation results from the portfolio notebook:
 
 | Model | ROC-AUC | PR-AUC | Precision | Recall | F1-score |
 |---|---:|---:|---:|---:|---:|
-| LightGBM | 0.7620 | 0.5387 | 0.4149 | 0.6472 | 0.5057 |
-| Random Forest | 0.7602 | 0.5331 | 0.5905 | 0.4261 | 0.4950 |
-| XGBoost | 0.7390 | 0.5113 | 0.4515 | 0.5337 | 0.4892 |
-| Logistic Regression | 0.7591 | 0.5095 | 0.3866 | 0.6905 | 0.4957 |
+| LightGBM | 0.7677 | 0.5378 | 0.4179 | 0.6422 | 0.5063 |
+| Random Forest | 0.7611 | 0.5349 | 0.5866 | 0.4221 | 0.4909 |
+| Logistic Regression | 0.7657 | 0.5212 | 0.3917 | 0.7015 | 0.5027 |
+| XGBoost | 0.7423 | 0.5104 | 0.4806 | 0.5367 | 0.5071 |
 
-LightGBM was selected as the final model because it achieved the strongest validation PR-AUC.
-
-## Threshold Choice
-
-The selected threshold is `0.30`.
-
-This threshold prioritizes recall for the default class. In credit risk, false negatives are costly because they represent risky clients classified as safe.
-
-Test results at threshold `0.30`:
-
-- ROC-AUC: 0.7693
-- PR-AUC: 0.5399
-- Brier score: 0.1628
-- Accuracy: 0.65
-- Default recall: 0.75
-- Default precision: 0.36
-
-Confusion matrix:
-
-| | Predicted 0 | Predicted 1 |
-|---|---:|---:|
-| Actual 0 | 2164 | 1340 |
-| Actual 1 | 245 | 751 |
-
-## SHAP Explainability
-
-SHAP analysis shows that the most important model drivers are:
-
-- `max_delay`
-- `PAY_0`
-- `min_payment_amount`
-- `recent_utilization_ratio`
-- `credit_utilization_ratio`
-- `LIMIT_BAL`
-
-Risk-increasing patterns include repayment delays, high utilization, and weak payment behavior. Risk-decreasing patterns include higher credit limits, stronger payment behavior, and lower utilization.
+The selected operating threshold is `0.30`, chosen to prioritize recall for default risk screening.
 
 ## Risk Scoring
 
-The risk score is calculated as:
+Risk score:
 
 ```text
 risk_score = round(default_probability * 100)
@@ -125,110 +140,132 @@ risk_score = round(default_probability * 100)
 
 Segments:
 
-- 0-30: Low Risk
-- 31-60: Medium Risk
-- 61-100: High Risk
+- `0-30`: Low Risk
+- `31-60`: Medium Risk
+- `61-100`: High Risk
 
-Example:
+## Credit Policy Overlay
 
-```text
-default_probability: 0.0705
-risk_score: 7
-risk_segment: Low Risk
-```
+The primary model is LightGBM, a tree-based model. Tree models can sometimes behave non-monotonically on rare or extreme values. For example, a severe repayment delay should not appear safer than a smaller delay in a credit-risk interface.
 
-## Repository Structure
+To make the scoring layer operationally sensible, RiskNot applies a transparent credit-policy overlay after the model prediction. The final displayed probability is:
 
 ```text
-RiskNot/
-├── Data/
-│   ├── raw/
-│   └── processed/
-├── notebooks/
-├── src/
-├── app/
-├── api/
-├── frontend/
-├── models/
-├── Reports/
-│   ├── figures/
-│   └── final_report.md
-├── notebooks/
-│   └── RiskNot_Colab.ipynb
-├── README.md
-├── requirements.txt
-└── .gitignore
+max(model_probability, policy_floor)
 ```
 
-## How To Run
+The API keeps this transparent by returning:
 
-Install dependencies:
+- `model_probability`: raw model probability
+- `default_probability`: final displayed probability
+- `policy_adjusted`: whether the overlay changed the output
 
-```bash
-pip install -r requirements.txt
+## Explainable AI
+
+RiskNot uses SHAP local explanations for each prediction.
+
+After scoring, the React UI shows:
+
+- `Raises risk`: strongest positive SHAP contributors
+- `Lowers risk`: strongest negative SHAP contributors
+
+These explanations describe model behavior, not guaranteed causal relationships.
+
+## Supabase Persistence
+
+Predictions are saved to Supabase in:
+
+```text
+public.risk_assessments
 ```
 
-Train from the modular script:
+Create the table by running `supabase_schema.sql` in the Supabase SQL Editor.
 
-```bash
-python -m src.train
-```
+Environment variables are backend-only:
 
-Run the Streamlit dashboard:
-
-```bash
-streamlit run app/streamlit_app.py
-```
-
-Run the FastAPI backend:
-
-```bash
-uvicorn api.main:app --reload
-```
-
-To persist predictions in Supabase, create the table from `supabase_schema.sql` and set backend-only environment variables:
-
-```bash
+```text
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
-The React frontend does not receive the service role key. It sends predictions to FastAPI, and FastAPI stores the assessment result in Supabase.
+Copy `.env.example` to `.env` and fill in real values. Do not commit `.env`.
 
-Run the React + Vite frontend:
+## Run Locally On Windows
 
-```bash
+Install Python and Node dependencies once:
+
+```powershell
+cd "C:\Users\barba\OneDrive\Masaüstü\RiskNot"
+.\setup_risknot.bat
+```
+
+Start the API and frontend:
+
+```powershell
+.\start_risknot.bat
+```
+
+Open:
+
+```text
+http://localhost:5173
+```
+
+Backend health check:
+
+```text
+http://localhost:8000/health
+```
+
+## Manual Run
+
+FastAPI backend:
+
+```powershell
+C:\Users\barba\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn api.main:app
+```
+
+React frontend:
+
+```powershell
 cd frontend
-npm install
-npm run dev
+"C:\Program Files\nodejs\npm.cmd" install
+"C:\Program Files\nodejs\npm.cmd" run dev
 ```
 
-For Colab study and heavy training, open `notebooks/RiskNot_Colab.ipynb` and run the notebook top to bottom. The notebook saves the final artifact to both the local runtime `models/` folder and Google Drive when mounted:
+## Training
+
+Use the notebook for study and training:
 
 ```text
-/content/drive/MyDrive/RiskNot/models/risknot_artifacts.joblib
+notebooks/RiskNot_Colab.ipynb
 ```
 
-## Dashboard Screenshot Placeholder
-
-Screenshots can be added later under:
+The notebook exports:
 
 ```text
-Reports/figures/
+models/risknot_artifacts.joblib
+```
+
+The modular training script is also available:
+
+```powershell
+python -m src.train
 ```
 
 ## Limitations
 
 - The dataset is from Taiwan and from 2005.
-- The model is for educational and portfolio purposes.
+- This project is for educational and portfolio purposes.
 - It should not be used for real credit decisions without updated, local, validated financial data.
 - Demographic variables require careful fairness, legal, and compliance review.
 - SHAP explanations show model behavior, not guaranteed causal relationships.
+- The credit-policy overlay is a transparent product guardrail, not a substitute for real underwriting policy.
 
 ## Future Improvements
 
-- Add deeper LightGBM hyperparameter tuning.
-- Add probability calibration and compare before/after calibration.
-- Add full fairness diagnostics by `SEX`, `EDUCATION`, `MARRIAGE`, and `AGE_GROUP`.
-- Expand the Streamlit dashboard with SHAP local explanations.
-- Add automated tests for data cleaning, feature engineering, and prediction.
+- Add CatBoost and calibrated ensemble comparison.
+- Train a monotonic-constrained LightGBM model.
+- Add probability calibration with Brier score comparison.
+- Add automated tests for cleaning, feature engineering, and prediction.
+- Add deployment configuration for a hosted backend and frontend.
